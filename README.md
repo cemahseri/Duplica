@@ -10,3 +10,6 @@ FastestDuplicateFileFinder.exe D:\path\to\your\mom
 
 # Extremely Fast
 It can scan 2,072 files, which is roughly 10 GB, in less than two seconds on my poor Pentium Dual-Core E6800 @ 3.33 GHz. xxHash, the fastest non-cryptographic hashing algorithm that is out there, is supporting this little piece of code.
+
+# To-Do
+- Mark the oldest file as original file and others as duplicate, while printing duplicate files out at the end of the process.
