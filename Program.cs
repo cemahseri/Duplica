@@ -10,7 +10,7 @@ namespace FastestDuplicateFileFinder
     internal static class Program
     {
         // Streams' default buffer size is 4 kilobyte, which is 4096 byte. That is not really useful for reading big files.
-        // So, instead of using 4 KB, using 4 MB as the buffer size will be better.
+        // So, instead of 4 KB, using 4 MB as the buffer size will be better.
         private const int Buffer = 4 * 1024 * 1024;
 
         private static Dictionary<string, ulong> _uniqueHashesBeginning = new Dictionary<string, ulong>();
