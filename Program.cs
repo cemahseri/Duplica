@@ -32,10 +32,14 @@ namespace FastestDuplicateFileFinder
             var possibleDuplicateFiles = files.GroupBy(f => f.Length).Where(s => s.Count() > 1).SelectMany(f => f.ToList()).ToList();
             if (possibleDuplicateFiles.Any())
             {
+                // Now we are checking possible duplicate files.
                 foreach (var file in possibleDuplicateFiles)
                 {
+                    // Instead of checking the whole file, just let's check the first 4 KB of the file.
                     var buffer = new byte[4096];
 
+                    // The main reason I'm wrapping this code with try-catch block is reading the file might throw an exception.
+                    // For example, there might be a problem with the HDD - which I faced recently while developing this program.
                     try
                     {
                         await using (var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
@@ -47,21 +51,24 @@ namespace FastestDuplicateFileFinder
                     }
                     catch
                     {
-                        Console.WriteLine("An exception has been thrown. File: " + file.FullName);
+                        Console.WriteLine("An exception has been thrown. Possibly corrupted file: " + file.FullName);
                     }
                 }
 
+                // Again, we ignoring the unique hashes. We do not need them, since they mean that they are not duplicate file.
                 _uniqueHashesBeginning = _uniqueHashesBeginning.GroupBy(f => f.Value).Where(s => s.Count() > 1).SelectMany(f => f).ToDictionary(p => p.Key, p => p.Value);
                 if (_uniqueHashesBeginning.Any())
                 {
                     foreach (var filePath in _uniqueHashesBeginning.Keys)
                     {
+                        // Finally, checking the file.
                         await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, Buffer);
 
                         try
                         {
                             var hash = await xxHash64.ComputeHashAsync(stream, Buffer).ConfigureAwait(false);
 
+                            // If the hash is already on the dictionary, it means that it's a duplicate file. Send it to GULAG.
                             if (UniqueHashes.TryGetValue(hash, out var duplicateFilePath))
                             {
                                 DuplicateFiles.Add(duplicateFilePath, filePath);
@@ -73,7 +80,7 @@ namespace FastestDuplicateFileFinder
                         }
                         catch
                         {
-                            Console.WriteLine("An exception has been thrown. File: " + filePath);
+                            Console.WriteLine("An exception has been thrown. Possibly corrupted file: " + filePath);
                         }
                     }
                 }
