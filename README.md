@@ -5,7 +5,7 @@ Yet another duplicate file finder that's developed by KISS principle.
 Just drag and drop the folder you want to scan, to the executable file.
 Or alternatively, you can specify a path from the command line.
 ```
-FastestDuplicateFileFinder.exe D:\path\to\your\mom
+FastestDuplicateFileFinder.exe C:\path\to\your\mom
 ```
 
 # Extremely Fast
