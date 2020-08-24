@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.30204.135
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FastestDuplicateFileFinder", "FastestDuplicateFileFinder.csproj", "{9B89B287-C2CF-405D-AEFE-0A9644D56374}"
+Project("{07DB5301-2FCD-42EF-8B37-49C38B1B294B}") = "FastestDuplicateFileFinder", "FastestDuplicateFileFinder.csproj", "{9B89B287-C2CF-405D-AEFE-0A9644D56374}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
