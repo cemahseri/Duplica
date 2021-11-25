@@ -2,113 +2,154 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Standart.Hash.xxHash;
+using FastestDuplicateFileFinder.Models;
 
-namespace FastestDuplicateFileFinder
+namespace FastestDuplicateFileFinder;
+
+internal static class Program
 {
-    internal static class Program
+    // Streams' default buffer size is 4096 bytes. That is not really useful for reading big files.
+    // So, instead of 4 KBs, using 1 MB as the buffer size will be better.
+    // I was using 4 MBs before but thanks to Dai, I've changed it to 1 MB: https://stackoverflow.com/questions/1862982/c-sharp-filestream-optimal-buffer-size-for-writing-large-files#comment123344066_1863003
+    private const int BufferSize = 1 * 1024 * 1024;
+
+    private static async Task Main(string[] paths)
     {
-        // First process is checking the size of files. Then, if there are files with the same size, then we will be calculating file's hash.
-        // Simply, reading the whole file will be enough, but it will be so expensive. Instead of that, we will read the first 4 KBs of the file.
-        private const int BeginningReadingBuffer = 4 * 1024;
-
-        // Streams' default buffer size is 4096 bytes. That is not really useful for reading big files.
-        // So, instead of 4 KBs, using 4 MBs as the buffer size will be better.
-        private const int RepeatedReadingBuffer = 4 * 1024 * 1024;
-
-        private static readonly Dictionary<ulong, List<FileInfo>> UniqueHashes = new Dictionary<ulong, List<FileInfo>>();
-
-        private static void Main(string[] args)
+        if (paths.Length < 1)
         {
-            if (args.Length < 1)
+            throw new ArgumentException("No path specified.");
+        }
+
+        var files = new List<FileInfo>();
+
+        foreach (var path in paths)
+        {
+            if (!Directory.Exists(path))
             {
-                throw new ArgumentException("No path specified.");
+                Console.Write("Path does not exist. Skipping: " + path);
+                continue;
             }
 
-            var directory = new DirectoryInfo(args[0]);
+            var directoryInfo = new DirectoryInfo(path);
+
+            Console.WriteLine("Checking folder: " + directoryInfo.Name);
 
             // "*.*" will only get files with extensions. But "*" will get every file.
             // And if SearchOption.AllDirectories wasn't used, it wouldn't be recursive scan and it'd only get the files in the target path, with not including files in the child directories.
-            Console.WriteLine("Getting files...");
-            var files = directory.GetFiles("*", SearchOption.AllDirectories);
+            files.AddRange(directoryInfo.GetFiles("*", SearchOption.AllDirectories));
+        }
 
-            if (files.Length == 0)
+        // If there are no files to compare, abort.
+        if (!files.Any())
+        {
+            Console.WriteLine("There are no files. All of those paths you've provided are empty.");
+            return;
+        }
+
+        Console.WriteLine("Files to check: " + files.Count);
+
+        IReadOnlyCollection<DuplicateFileGroup> possibleDuplicateFileGroups = files.GroupBy(f => f.Length)
+            .Where(s => s.Count() > 1)
+            .Select(g => new DuplicateFileGroup(g.Key, g.Select(f => new DuplicateFileInfo(f))))
+            .ToList()
+            .AsReadOnly();
+
+        // If there are no possible duplicate file groups, abort. It means there are no same sized files, which means every file is unique.
+        if (!possibleDuplicateFileGroups.Any())
+        {
+            Console.WriteLine("There are no duplicate files.");
+            return;
+        }
+
+        Console.WriteLine("Possible duplicate files: " + (possibleDuplicateFileGroups.SelectMany(g => g.Files).Count() - possibleDuplicateFileGroups.Count));
+        Console.WriteLine();
+
+        foreach (var duplicateFileGroup in possibleDuplicateFileGroups.OrderBy(g => g.Size)) // We are sorting duplicate file groups from low size to high size.
+        {
+            // If there are no possible duplicate files in the current group, skip.
+            if (!duplicateFileGroup.Files.Any())
             {
-                Console.WriteLine("Uhhh... Dude, this directory is empty.");
-                Console.ReadKey();
-                return;
+                continue;
             }
 
-            Console.WriteLine("Files to check: " + files.Length + Environment.NewLine);
+            var numberOfChunks = duplicateFileGroup.Size / BufferSize;
 
-            // If there is more than one file with the same size, there is a possibility that they are identical.
-            // So, we are only interested in same sized files. Because of that, we are ignoring different sized files.
-            Console.WriteLine("Checking possible duplicate files...");
-            var possibleDuplicateFiles = files.GroupBy(f => f.Length).Where(s => s.Count() > 1).SelectMany(f => f).ToList();
-
-            Console.WriteLine("Possible duplicate files: " + possibleDuplicateFiles.Count + Environment.NewLine);
-
-            // Now we are checking if possible duplicate files are really identical.
-            // And again, we ignoring the unique hashes. We do not need them, since they mean that they are not duplicate file.
-            Console.WriteLine("Checking duplicate files...");
-            foreach (var (file, _) in files.Select(f => Tuple.Create(f, CalculateHash(f.FullName))).GroupBy(t => t.Item2).Where(h => h.Count() > 1).SelectMany(t => t))
+            for (var chunk = 0; chunk <= numberOfChunks; chunk++)
             {
-                var hash = CalculateHash(file.FullName, RepeatedReadingBuffer);
+                var hashes = new Dictionary<ulong, List<DuplicateFileInfo>>();
 
-                if (!UniqueHashes.ContainsKey(hash))
+                foreach (var file in duplicateFileGroup.Files)
                 {
-                    UniqueHashes.Add(hash, new List<FileInfo> { file });
-                }
-                else
-                {
-                    UniqueHashes[hash].Add(file);
-                }
-            }
-
-            if (UniqueHashes.Any())
-            {
-                // Let's sort files based on their creation time. Because, oldest file will be our original file and others will be marked as duplicate.
-                foreach (var duplicateFiles in UniqueHashes.Values.Select(d => d.OrderBy(f => f.CreationTime).ToList()))
-                {
-                    Console.WriteLine(Environment.NewLine + "Duplicate files for: " + duplicateFiles.First());
-
-                    foreach (var duplicateFile in duplicateFiles.Skip(1))
+                    // If the file is unique, skip. We already figured out that it's not same with the other files in the group.
+                    // So continuing to check it will be waste of resources.
+                    if (file.IsUnique)
                     {
-                        Console.WriteLine("  " + duplicateFile.FullName);
+                        continue;
+                    }
+                    
+                    await using var stream = new FileStream(file.FileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, FileOptions.SequentialScan);
+
+                    // If we can't read the stream, skip the file.
+                    if (!stream.CanRead)
+                    {
+                        continue;
+                    }
+
+                    // We need a stream that supports seeking. If we can't seek, skip the file.
+                    if (!stream.CanSeek)
+                    {
+                        continue;
+                    }
+
+                    stream.Seek(chunk * BufferSize, SeekOrigin.Begin);
+
+                    var buffer = new byte[BufferSize];
+
+                    await stream.ReadAsync(buffer, 0, BufferSize);
+
+                    var hash = xxHash64.ComputeHash(buffer, buffer.Length);
+
+                    if (hashes.TryGetValue(hash, out var possibleDuplicateFiles))
+                    {
+                        possibleDuplicateFiles.Add(file);
+                    }
+                    else
+                    {
+                        hashes.Add(hash, new List<DuplicateFileInfo> { file });
+                    }
+                }
+
+                if (hashes.Count > 1)
+                {
+                    foreach (var info in hashes.Values.Where(f => f.Count == 1))
+                    {
+                        info.First().IsUnique = true;
                     }
                 }
             }
-            else
-            {
-                Console.WriteLine("No duplicate files found.");
-            }
 
-            Console.ReadKey();
+            var duplicateFiles = duplicateFileGroup.Files.Where(f => !f.IsUnique)
+                .OrderBy(f => f.FileInfo.CreationTime)
+                .ToList();
+
+            if (duplicateFiles.Any())
+            {
+                var originalFile = duplicateFiles.First();
+
+                Console.WriteLine("Duplicate files for: " + originalFile.FileInfo.FullName);
+
+                foreach (var file in duplicateFiles.Skip(1))
+                {
+                    Console.WriteLine("  " + file.FileInfo.FullName);
+                }
+
+                Console.WriteLine();
+            }
         }
 
-        // Using BeginningReadingBuffer won't change anything, since they are both 4096 bytes.
-        // But if I want to change buffer size in the future, it will be easier to do so.
-        private static ulong CalculateHash(string path, int bufferSize = BeginningReadingBuffer, int startingIndex = 0)
-        {
-            var buffer = new byte[bufferSize];
-
-            // The main reason I'm wrapping this code with try-catch block is reading the file might throw an exception.
-            // For example, there might be a problem with the HDD - which I have faced recently while developing this program.
-            // Instead of aborting the whole process, skipping only a file would be better.
-            try
-            {
-                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize);
-                stream.Read(buffer, startingIndex, bufferSize);
-            }
-            catch
-            {
-                Console.WriteLine("An exception has been thrown. Possibly corrupted file: " + path);
-
-                // LU (or UL, Ul, uL, ul, Lu, lU, lu) postfix tells the compiler that we are using unsigned long (ulong) type instead of the default integer type, int. Nothing that much happens if you don't use it.
-                return 0LU;
-            }
-
-            return xxHash64.ComputeHash(buffer);
-        }
+        Console.WriteLine("Checking duplicate files has been finished. Press any key to exit...");
+        Console.ReadKey(true);
     }
 }
