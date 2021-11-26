@@ -19,7 +19,10 @@ internal static class Program
     {
         if (paths.Length < 1)
         {
-            throw new ArgumentException("No path specified.");
+            Console.WriteLine("No path(s) specified. Press any key to exit...");
+
+            Console.ReadKey(true);
+            return;
         }
 
         var files = new List<FileInfo>();
@@ -34,8 +37,6 @@ internal static class Program
 
             var directoryInfo = new DirectoryInfo(path);
 
-            Console.WriteLine("Checking folder: " + directoryInfo.Name);
-
             // "*.*" will only get files with extensions. But "*" will get every file.
             // And if SearchOption.AllDirectories wasn't used, it wouldn't be recursive scan and it'd only get the files in the target path, with not including files in the child directories.
             files.AddRange(directoryInfo.GetFiles("*", SearchOption.AllDirectories));
@@ -44,11 +45,14 @@ internal static class Program
         // If there are no files to compare, abort.
         if (!files.Any())
         {
-            Console.WriteLine("There are no files. All of those paths you've provided are empty.");
+            Console.WriteLine("There are no files. All of those paths you've provided are empty. Press any key to exit...");
+
+            Console.ReadKey(true);
             return;
         }
 
         Console.WriteLine("Files to check: " + files.Count);
+        Console.WriteLine();
 
         IReadOnlyCollection<DuplicateFileGroup> possibleDuplicateFileGroups = files.GroupBy(f => f.Length)
             .Where(s => s.Count() > 1)
@@ -59,7 +63,9 @@ internal static class Program
         // If there are no possible duplicate file groups, abort. It means there are no same sized files, which means every file is unique.
         if (!possibleDuplicateFileGroups.Any())
         {
-            Console.WriteLine("There are no duplicate files.");
+            Console.WriteLine("There are no duplicate files. Press any key to exit...");
+
+            Console.ReadKey(true);
             return;
         }
 
