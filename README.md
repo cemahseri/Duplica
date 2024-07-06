@@ -1,9 +1,25 @@
-# FastestDuplicateFileFinder
-Yet another duplicate file finder that's developed by KISS principle. But it's faster. With fast, I mean real fast.
+[![NuGet Version (Duplica)](https://img.shields.io/nuget/v/Duplica?style=for-the-badge&color=D800FF)](https://www.nuget.org/packages/Duplica)
+[![NuGet Downloads (Duplica)](https://img.shields.io/nuget/dt/Duplica?style=for-the-badge&color=D800FF)](https://www.nuget.org/packages/Duplica)
 
-# Usage
-Just drag and drop the folder(s) you want to scan, to the executable file.
-Or alternatively, you can specify path(s) from the command line.
+# Duplica
+A very fast duplicate file finder.
+
+# Usage Example
+You can check the ExampleApplication project!
+```csharp
+await foreach (var duplicateFileGroup in DuplicaAnalyzer.GetDuplicateFileGroupsAsync(@"E:\path\to\your\mom"))
+{
+    Console.WriteLine($"{duplicateFileGroup.OriginalFile.FullName}");
+
+    Console.WriteLine($"{duplicateFileGroup.DuplicateFiles.Count} duplicate files found.");
+    foreach (var duplicateFile in duplicateFileGroup.DuplicateFiles)
+    {
+        Console.WriteLine($"  -{duplicateFile.FullName}");
+    }
+
+    Console.WriteLine();
+}
 ```
-FastestDuplicateFileFinder.exe C:\path\to\your\mom C:\another\path\to\your\mom C:\still\path\to\your\mom
-```
+
+# To-Do
+- Use different buffer sizes based on file size. *(1 MB buffer seems to be optimal but 512 KB buffer seems to be working better with smaller files.)*
